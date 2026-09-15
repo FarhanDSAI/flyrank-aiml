@@ -1,8 +1,8 @@
 # Capstone Report — AI-Referral Opportunity (Generative Engine Optimization)
 
-- **Author:** Prasanna Sai S
+- **Author:** Farhan Raza Khan
 - **Lane:** Freestyle — AI-Referral Opportunity / GEO (ranking & scoring, not classification)
-- **Repo:** https://github.com/PrasannaSaiS/machinelearning01-flyrank
+- **Repo:** https://github.com/FarhanDSAI/the-Starter-Notebooks
 - **Date:** August 2026
 
 
