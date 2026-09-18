@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prioritizing Content Review Under Limited Capacity — A Client-Grouped Evaluation | Farman Ali</title>
+<meta name="description" content="A research report on ranking declining content pages for review, built on the FlyRank ML Internship warehouse dataset.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F5F6F8;
+    --surface: #FFFFFF;
+    --ink: #10131F;
+    --ink-muted: #565C72;
+    --ink-faint: #8A8FA3;
+    --line: #E2E4EA;
+    --line-strong: #C7CBD6;
+    --accent-link: #1C4ED8;
+    --accent-link-bg: #EAF0FE;
+    --accent-decline: #B4460F;
+    --accent-decline-bg: #FCEEE6;
+    --accent-confirm: #0F7B57;
+    --accent-confirm-bg: #E7F5EF;
+    --accent-limit: #9A6B00;
+    --accent-limit-bg: #FBF3DC;
+    --mono-bg: #EEF0F4;
+    --radius: 10px;
+    --content-width: 780px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Inter', -apple-system, sans-serif;
+    font-size: 17px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    line-height: 1.15;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+
+  a { color: var(--accent-link); text-decoration-thickness: 1.5px; text-underline-offset: 2px; }
+  a:focus-visible, button:focus-visible, .navlink:focus-visible {
+    outline: 2.5px solid var(--accent-link);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  code, .mono { font-family: 'IBM Plex Mono', monospace; }
+
+  /* ---------- Layout shell ---------- */
+  .shell {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    max-width: 1180px;
+    margin: 0 auto;
+  }
+
+  @media (max-width: 900px) {
+    .shell { grid-template-columns: 1fr; }
+  }
+
+  /* ---------- Sidebar nav ---------- */
+  .sidenav {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    height: 100vh;
+    overflow-y: auto;
+    padding: 40px 20px 40px 32px;
+    border-right: 1px solid var(--line);
+  }
+
+  @media (max-width: 900px) {
+    .sidenav { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--line); padding: 24px; }
+  }
+
+  .sidenav .brand {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    margin-bottom: 4px;
+  }
+  .sidenav .brand-sub {
+    font-size: 12.5px;
+    color: var(--ink-faint);
+    margin-bottom: 28px;
+  }
+
+  .navlink {
+    display: block;
+    font-size: 13.5px;
+    color: var(--ink-muted);
+    text-decoration: none;
+    padding: 7px 10px;
+    border-radius: 7px;
+    margin-bottom: 2px;
+  }
+  .navlink:hover { background: var(--mono-bg); color: var(--ink); }
+  .navlink .num { font-family: 'IBM Plex Mono', monospace; color: var(--ink-faint); margin-right: 8px; font-size: 12px; }
+
+  .nav-meta {
+    margin-top: 28px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+    font-size: 12px;
+    color: var(--ink-faint);
+    line-height: 1.6;
+  }
+  .nav-meta a { color: var(--accent-link); }
+
+  /* ---------- Main content ---------- */
+  main { padding: 0 24px; min-width: 0; }
+  .doc { max-width: var(--content-width); margin: 0 auto; padding: 56px 0 100px; }
+
+  .eyebrow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 10px;
+  }
+
+  /* ---------- Hero ---------- */
+  .hero { padding-bottom: 40px; border-bottom: 1px solid var(--line); margin-bottom: 48px; }
+  .hero h1 { font-size: 34px; margin: 0 0 16px; max-width: 15ch; }
+  @media (max-width: 560px) { .hero h1 { font-size: 27px; } }
+  .hero .subtitle { font-size: 18px; color: var(--ink-muted); max-width: 58ch; margin: 0 0 24px; }
+
+  .byline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    font-size: 13.5px;
+    color: var(--ink-muted);
+    margin-bottom: 28px;
+  }
+  .byline strong { color: var(--ink); }
+
+  .hero-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  @media (max-width: 640px) { .hero-stats { grid-template-columns: repeat(2, 1fr); } }
+  .hero-stat { background: var(--surface); padding: 16px 14px; }
+  .hero-stat .figure { font-family: 'IBM Plex Mono', monospace; font-size: 22px; font-weight: 600; color: var(--ink); }
+  .hero-stat .label { font-size: 12px; color: var(--ink-faint); margin-top: 4px; line-height: 1.35; }
+
+  /* ---------- Sections ---------- */
+  section { margin-bottom: 56px; scroll-margin-top: 24px; }
+  section h2 { font-size: 24px; margin: 0 0 18px; }
+  section h3 { font-size: 17px; margin: 28px 0 10px; }
+  p { margin: 0 0 16px; color: var(--ink); }
+  p.muted { color: var(--ink-muted); }
+  ul, ol { padding-left: 22px; margin: 0 0 16px; }
+  li { margin-bottom: 8px; }
+
+  /* ---------- Tag / verdict pill system (signature element) ---------- */
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    padding: 3px 8px;
+    border-radius: 5px;
+    line-height: 1.4;
+    white-space: nowrap;
+  }
+  .tag-confirm { background: var(--accent-confirm-bg); color: var(--accent-confirm); }
+  .tag-observe { background: var(--accent-link-bg); color: var(--accent-link); }
+  .tag-limit   { background: var(--accent-limit-bg); color: var(--accent-limit); }
+  .tag-decline { background: var(--accent-decline-bg); color: var(--accent-decline); }
+
+  .claim {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    margin-bottom: 14px;
+  }
+  .claim .tag { flex-shrink: 0; margin-top: 2px; }
+  .claim p { margin: 0; font-size: 15.5px; color: var(--ink-muted); }
+  .claim p strong { color: var(--ink); }
+
+  /* ---------- Data receipt cards ---------- */
+  .receipt {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+    margin: 20px 0;
+  }
+  .receipt-title { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; }
+  .receipt-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 14.5px;
+  }
+  .receipt-row:last-child { border-bottom: none; }
+  .receipt-row .k { color: var(--ink-muted); }
+  .receipt-row .v { font-family: 'IBM Plex Mono', monospace; color: var(--ink); text-align: right; }
+
+  /* ---------- Tables ---------- */
+  .twrap { overflow-x: auto; margin: 20px 0; border: 1px solid var(--line); border-radius: var(--radius); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; background: var(--surface); }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-faint); background: var(--mono-bg); }
+  tr:last-child td { border-bottom: none; }
+  td.mono, td code { font-family: 'IBM Plex Mono', monospace; font-size: 13px; }
+
+  /* ---------- Charts ---------- */
+  .chart-block { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; margin: 20px 0; }
+  .chart-caption { font-size: 13px; color: var(--ink-faint); margin-top: 12px; }
+
+  /* ---------- Code block ---------- */
+  pre {
+    background: var(--ink);
+    color: #DCE1F0;
+    padding: 16px 18px;
+    border-radius: var(--radius);
+    overflow-x: auto;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    margin: 16px 0;
+  }
+
+  /* ---------- Recommendations list ---------- */
+  .rec {
+    display: grid;
+    grid-template-columns: 32px 1fr;
+    gap: 14px;
+    padding: 16px 0;
+    border-top: 1px solid var(--line);
+  }
+  .rec:first-of-type { border-top: none; }
+  .rec .n { font-family: 'IBM Plex Mono', monospace; color: var(--ink-faint); font-size: 13px; padding-top: 2px; }
+  .rec h4 { margin: 0 0 4px; font-size: 15.5px; font-weight: 600; }
+  .rec p { margin: 0; font-size: 14.5px; color: var(--ink-muted); }
+
+  /* ---------- No-go box ---------- */
+  .nogo { background: var(--accent-decline-bg); border: 1px solid #F0C4A8; border-radius: var(--radius); padding: 18px 20px; }
+  .nogo-title { font-family: 'IBM Plex Mono', monospace; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent-decline); margin-bottom: 10px; font-weight: 600; }
+  .nogo ul { margin: 0; padding-left: 20px; }
+  .nogo li { color: #7A3009; font-size: 14.5px; }
+
+  /* ---------- Footer / acknowledgments ---------- */
+  footer {
+    border-top: 1px solid var(--line);
+    padding-top: 32px;
+    margin-top: 56px;
+  }
+  .credit-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 20px 22px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .credit-card .credit-text { font-size: 14.5px; color: var(--ink-muted); flex: 1; min-width: 220px; }
+  .credit-card a.btn {
+    display: inline-block;
+    background: var(--ink);
+    color: #fff;
+    text-decoration: none;
+    font-size: 13.5px;
+    font-weight: 600;
+    padding: 9px 16px;
+    border-radius: 8px;
+  }
+  .footer-links { margin-top: 24px; font-size: 13.5px; color: var(--ink-faint); }
+  .footer-links a { color: var(--ink-muted); margin-right: 18px; }
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- ============ SIDEBAR ============ -->
+  <nav class="sidenav" aria-label="Paper sections">
+    <div class="brand">Content Review Prioritization</div>
+    <div class="brand-sub">FlyRank ML Internship — Capstone</div>
+
+    <a class="navlink" href="#abstract"><span class="num">00</span>Abstract</a>
+    <a class="navlink" href="#intro"><span class="num">01</span>Introduction</a>
+    <a class="navlink" href="#data"><span class="num">02</span>Data</a>
+    <a class="navlink" href="#method"><span class="num">03</span>Methodology</a>
+    <a class="navlink" href="#results"><span class="num">04</span>Results</a>
+    <a class="navlink" href="#limits"><span class="num">05</span>Limitations</a>
+    <a class="navlink" href="#recs"><span class="num">06</span>Recommendations</a>
+    <a class="navlink" href="#repro"><span class="num">07</span>Reproducibility</a>
+    <a class="navlink" href="#credit"><span class="num">08</span>Acknowledgments</a>
+
+    <div class="nav-meta">
+      Farman Ali<br>
+      BS Software Engineering<br>
+      Emerson University of Multan<br><br>
+      <a href="https://github.com/itsrealfarman/flyrank-ml-internship" target="_blank" rel="noopener">Source repo →</a>
+    </div>
+  </nav>
+
+  <!-- ============ MAIN ============ -->
+  <main>
+    <div class="doc">
+
+      <!-- ---------- HERO ---------- -->
+      <div class="hero">
+        <div class="eyebrow">Applied Search Intelligence — Lane 2</div>
+        <h1>Prioritizing Content Review Under Limited Capacity</h1>
+        <p class="subtitle">A client-grouped evaluation of rule-based and learned rankings for surfacing declining pages, built on 79 million rows of real, pseudonymized search performance data.</p>
+        <div class="byline">
+          <span><strong>Farman Ali</strong> · Generative AI Developer</span>
+          <span>FlyRank ML Internship, 2026</span>
+        </div>
+        <div class="hero-stats">
+          <div class="hero-stat"><div class="figure">41,816</div><div class="label">pages scored in the final review queue</div></div>
+          <div class="hero-stat"><div class="figure">0.66</div><div class="label">model Precision@50 vs 0.28 for the rule baseline</div></div>
+          <div class="hero-stat"><div class="figure">5</div><div class="label">observed-only features, no future data</div></div>
+          <div class="hero-stat"><div class="figure">104</div><div class="label">clients in the warehouse release</div></div>
+        </div>
+      </div>
+
+      <!-- ---------- ABSTRACT ---------- -->
+      <section id="abstract">
+        <div class="eyebrow">00 — Abstract</div>
+        <h2>Abstract</h2>
+        <p>With thousands of content pages and limited reviewer time, which pages deserve a human's attention first? This report frames that as a ranking problem — Lane 2 of the FlyRank ML Internship — and builds a client-grouped Random Forest model that scores pages by likelihood of decline, using only signals observable before the decision point. The model is compared against a transparent, hand-written baseline rule on the exact same held-out clients and the same metric, Precision@50. Across two independent client-grouped evaluation runs, the model scored 0.66 and 0.56 respectively, both several times higher than the baseline's 0.28 — a directional, decision-support result, not a fixed benchmark. Two leakage checks — one at the feature level, one at the split level — are reported in full, including a case where an apparently "honest" score of 0.999 turned out to be an artifact of low-volume noise. The final output is a ranked, human-reviewed action playbook with reason codes, an explicit no-go list, and monitoring triggers, built for one honest purpose: helping a reviewer spend limited time on the pages most worth it.</p>
+      </section>
+
+      <!-- ---------- INTRODUCTION ---------- -->
+      <section id="intro">
+        <div class="eyebrow">01 — Introduction</div>
+        <h2>Introduction &amp; Problem Statement</h2>
+        <p>FlyRank's client portfolios contain tens of thousands of content pages each, and traffic to those pages moves constantly — some pages grow, some quietly decline for months before anyone notices. A content team can only review a small number of pages per week. The question this report answers is not "which pages are declining" in the abstract, but a narrower, more useful one:</p>
+
+        <p>This is the real problem behind two of FlyRank's own product flags studied during this track: a CTR-fix flag (pages underperforming their search position) and a refresh flag (pages worth revisiting after a long gap). Both exist because someone at FlyRank already had to solve this exact triage problem by hand. This report is a case study in building and honestly validating one version of that triage logic from first principles — checking the signals behind those flags before trusting them, then testing whether a learned ranking earns its keep over a transparent rule.</p>
+        <div class="claim">
+          <span class="tag tag-observe">QUESTION</span>
+          <p>Which pages should a content reviewer open <strong>first</strong>, this week, given limited capacity?</p>
+        </div>
+        <p>This is a <strong>decision-support ranking problem</strong>, not a classification problem in the usual sense — the deliverable is an ordered queue with reasons attached, not a single yes/no verdict. That framing shapes every choice in this report: the metric (Precision@50, matched to a realistic weekly review capacity), the validation design (client-grouped, so the model is judged on clients it has never partially seen), and the final output (a playbook with an explicit list of what a human must check, and what should never be automated).</p>
+      </section>
+
+      <!-- ---------- DATA ---------- -->
+      <section id="data">
+        <div class="eyebrow">02 — Data</div>
+        <h2>Data</h2>
+        <p>This work uses the <strong>FlyRank ML Internship warehouse release</strong> (build <code>flyrank_pseudonymized_warehouse_release_v20260703</code>), hosted on Hugging Face and accessed read-only via DuckDB. All identifiers are pseudonymized; no raw client names, domains, URLs, or queries appear anywhere in this analysis or in the underlying repository.</p>
+
+        <div class="receipt">
+          <div class="receipt-title">Data contract</div>
+          <div class="receipt-row"><span class="k">Tables used</span><span class="v">dim_clients, fact_content_daily_performance</span></div>
+          <div class="receipt-row"><span class="k">Grain</span><span class="v">one row = one page, summarized over one month</span></div>
+          <div class="receipt-row"><span class="k">Working window</span><span class="v">2026-03-01 → 2026-03-31</span></div>
+          <div class="receipt-row"><span class="k">Feature window</span><span class="v">2026-03-01 → 2026-03-16 (first half)</span></div>
+          <div class="receipt-row"><span class="k">Label window</span><span class="v">2026-03-16 → 2026-04-01 (second half)</span></div>
+          <div class="receipt-row"><span class="k">Volume floor</span><span class="v">≥ 500 impressions in the feature window</span></div>
+          <div class="receipt-row"><span class="k">Clients in release</span><span class="v">104</span></div>
+        </div>
+
+        <h3>Why this month, and why not the newest data</h3>
+        <p>A mid-panel month (March 2026) was chosen deliberately over the release's final month. The warehouse's <code>_sample</code> table holds exactly the last month of history — using it to build or test label logic would mean training on the same window a real deployment would later try to predict, an easy way to fool yourself into an optimistic result. The final month was treated as a sealed test window and left untouched throughout this project.</p>
+
+        <h3>What was excluded, and why</h3>
+        <div class="claim">
+          <span class="tag tag-observe">EXCLUDED</span>
+          <p><code>fact_content_query_90d</code> (the query-level table) was deliberately left out of this pass. It's a genuinely useful table for future work — query concentration, rare/anonymized tail share — but including it here would have made the first data contract too large to verify carefully. Scope was kept small on purpose, not because the table lacks value.</p>
+        </div>
+        <div class="claim">
+          <span class="tag tag-limit">LIMITATION</span>
+          <p>The panel is <strong>unbalanced across clients</strong> — <code>gsc_data_start</code> differs per client, so this one-month slice contains full prior history for long-tenured clients and little or none for newer ones. Any month-over-month comparison needs a per-client history check before it can be trusted.</p>
+        </div>
+      </section>
+
+      <!-- ---------- METHODOLOGY ---------- -->
+      <section id="method">
+        <div class="eyebrow">03 — Methodology</div>
+        <h2>Methodology</h2>
+
+        <h3>Label</h3>
+        <p>The target, <code>is_declining</code>, flags a page whose second-half-of-month impressions fell more than 20% below what the first half would project:</p>
+        <pre>is_declining = imp_h2 &lt; 0.8 × avg_impressions_h1 × 15</pre>
+        <p class="muted">This is a proxy label — a same-month, percentage-threshold definition, not a verified business outcome. A stronger capstone-grade label would use a longer forward window and a matched, non-percentage-based threshold; this is named explicitly as future work in Limitations.</p>
+
+        <h3>Features (all first-half-only)</h3>
+        <div class="twrap">
+          <table>
+            <thead><tr><th>Feature</th><th>Available at decision point because…</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">avg_impressions_h1</td><td>Sum of Mar 1–15 impressions only — already observed</td></tr>
+              <tr><td class="mono">avg_clicks_h1</td><td>Same first-half window</td></tr>
+              <tr><td class="mono">ctr_h1</td><td>Ratio of two first-half quantities — no second-half information</td></tr>
+              <tr><td class="mono">avg_position_h1</td><td>Average search position, first half only</td></tr>
+              <tr><td class="mono">days_with_impressions_h1</td><td>Count of visible days within the first 15 days only</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Baseline</h3>
+        <p>A transparent, hand-written rule, <code>ctr_below_tier_expectation</code>: flag pages in the <code>top_10</code>/<code>top_20</code> position tiers whose CTR sits meaningfully below the tier's own observed average, scored by <code>ctr_gap × impressions</code>. This mirrors the CTR-fix logic behind FlyRank's own product flags, and its two supporting signals were checked against real bucketed data before being trusted — both came back <span class="tag tag-confirm">CONFIRMED</span>.</p>
+
+        <h3>Model</h3>
+        <p>A client-grouped Random Forest classifier (300 trees, max depth 8, balanced class weight), chosen because no single signal above correlates strongly with the label in isolation (all under 0.10) — exactly the shape of problem a single rule structurally can't capture, but a model that combines several weak signals can.</p>
+
+        <h3>Validation design</h3>
+        <p>Pages are split 75/25 by <strong>client</strong> (<code>GroupShuffleSplit</code>), with zero client overlap confirmed between train and test. A plain random split would let pages from the same client sit in both halves, letting the model partly recognize a client's style rather than learning general signals — the honest test is on clients the model has never seen a single page from.</p>
+
+        <h3>Leakage checks</h3>
+        <div class="claim">
+          <span class="tag tag-limit">LEAK FOUND — FEATURE LEVEL</span>
+          <p>Deliberately including <code>imp_h2</code> — the exact quantity the label is built from — as a feature spiked ROC AUC to <strong>0.999</strong>. On first pass, even the "honest" feature set (without <code>imp_h2</code>) still scored <strong>0.999</strong>, because a low minimum-volume floor let percentage-threshold noise on tiny pages leak signal through <code>avg_impressions_h1</code> alone. Raising the volume floor from 50 to 500 impressions fixed it — the honest score dropped to a real <strong>0.614</strong>.</p>
+        </div>
+        <div class="claim">
+          <span class="tag tag-limit">LEAK FOUND — SPLIT LEVEL</span>
+          <p>A naive random split (ignoring client boundaries) scored <strong>0.82</strong> Precision@50; the honest client-grouped split scored <strong>0.56</strong> on the identical features and label. The 0.26-point gap is the size of the optimism client leakage was buying for free.</p>
+        </div>
+      </section>
+
+      <!-- ---------- RESULTS ---------- -->
+      <section id="results">
+        <div class="eyebrow">04 — Results</div>
+        <h2>Results</h2>
+        <p>Model vs. baseline, on the same held-out client-grouped test set, same metric (Precision@50 — of the top 50 ranked pages, how many were actually declining):</p>
+
+        <div class="chart-block">
+          <svg viewBox="0 0 640 260" width="100%" role="img" aria-labelledby="chart1title">
+            <title id="chart1title">Bar chart: baseline Precision at 50 is 0.28, model Precision at 50 is 0.66</title>
+            <line x1="60" y1="20" x2="60" y2="210" stroke="#C7CBD6" stroke-width="1"/>
+            <line x1="60" y1="210" x2="600" y2="210" stroke="#C7CBD6" stroke-width="1"/>
+            <text x="52" y="24" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="11" fill="#8A8FA3">1.0</text>
+            <text x="52" y="117" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="11" fill="#8A8FA3">0.5</text>
+            <text x="52" y="213" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="11" fill="#8A8FA3">0.0</text>
+            <line x1="60" y1="20" x2="600" y2="20" stroke="#EEF0F4" stroke-width="1"/>
+            <line x1="60" y1="115" x2="600" y2="115" stroke="#EEF0F4" stroke-width="1"/>
+            <rect x="180" y="157.2" width="110" height="52.8" fill="#B4460F" opacity="0.85" rx="3"/>
+            <text x="235" y="147" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="15" font-weight="600" fill="#10131F">0.28</text>
+            <text x="235" y="232" text-anchor="middle" font-family="Inter, sans-serif" font-size="13" fill="#565C72">Baseline rule</text>
+            <rect x="380" y="84.4" width="110" height="125.6" fill="#1C4ED8" opacity="0.9" rx="3"/>
+            <text x="435" y="74" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="15" font-weight="600" fill="#10131F">0.66</text>
+            <text x="435" y="232" text-anchor="middle" font-family="Inter, sans-serif" font-size="13" fill="#565C72">Random Forest model</text>
+          </svg>
+          <div class="chart-caption">Precision@50, client-grouped test set, March 2026 slice. Model ranking beat the transparent baseline rule by a factor of roughly 2.4×.</div>
+        </div>
+
+        <h3>Errors and interpretation</h3>
+        <p>Both built-in and permutation feature importance agree that <code>ctr_h1</code> drives the model most (built-in: 0.331, permutation: 0.057 — several times larger than any other feature in either ranking). <code>avg_clicks_h1</code> and <code>avg_impressions_h1</code> showed slightly negative permutation importance, meaning they're largely redundant with <code>ctr_h1</code>, which already combines both.</p>
+        <p>The model's false positives share a clear pattern: very poor position (avg position in the high-30s/40s) combined with near-zero CTR — pages that are already performing badly rather than pages actively getting worse. This is a real limitation, addressed directly in the final playbook (Section 06) with a dedicated <code>monitor_only</code> action for exactly this pattern, rather than silently rewriting pages that have nowhere left to fall.</p>
+
+        <h3>On result stability</h3>
+        <div class="claim">
+          <span class="tag tag-observe">OBSERVED</span>
+          <p>A later, independent re-run of the same client-grouped evaluation (as part of the Week-6 validation audit) scored <strong>0.56</strong> instead of 0.66 — both several times the baseline's 0.28, but not identical to each other. With a modest number of held-out clients, the exact figure moves run to run. This range, not a single number, is the honest result.</p>
+        </div>
+      </section>
+
+      <!-- ---------- LIMITATIONS ---------- -->
+      <section id="limits">
+        <div class="eyebrow">05 — Limitations</div>
+        <h2>Limitations &amp; Honest Framing</h2>
+        <div class="claim"><span class="tag tag-limit">SCOPE</span><p>Built and evaluated on one mid-panel month (March 2026) of a 104-client slice. Not yet tested against the sealed final month, other months, or the full multi-year warehouse history.</p></div>
+        <div class="claim"><span class="tag tag-limit">LABEL</span><p><code>is_declining</code> is a same-month, percentage-threshold proxy, not a verified business outcome. It says nothing about whether a page's decline matters commercially, only whether its impressions fell by more than 20% within one month.</p></div>
+        <div class="claim"><span class="tag tag-limit">CAUSALITY</span><p>Nothing here shows that <em>acting</em> on a flagged page — rewriting a title, refreshing content — causes recovery. This mirrors a finding from an external audit performed on FlyRank's own published research paper as part of this track: a reported "52× impression lift" from refreshing old pages was not randomly assigned, so the gap may partly reflect which pages editors chose to refresh, not what refreshing itself does. The same caution applies here: this model ranks candidates worth a human's attention, it does not prove a fix will work.</p></div>
+        <div class="claim"><span class="tag tag-limit">VARIANCE</span><p>Precision@50 moved from 0.66 to 0.56 across two honest re-runs of the same method — a real result, but not a fixed benchmark, given the modest number of held-out clients in a one-month slice.</p></div>
+        <div class="claim"><span class="tag tag-limit">GENERALIZATION</span><p>The 0.56–0.66 range is an <em>average</em> across held-out clients. Any single new client could sit well above or below it, especially one whose content style differs a lot from the training set.</p></div>
+      </section>
+
+      <!-- ---------- RECOMMENDATIONS ---------- -->
+      <section id="recs">
+        <div class="eyebrow">06 — Ranked Recommendations</div>
+        <h2>Ranked Recommendations — The Action Playbook</h2>
+        <p>The validated model was retrained on the full labeled slice to produce a deployment-ready queue of <strong>41,816 pages</strong>, each with a reason code and one recommended action:</p>
+
+        <div class="chart-block">
+          <svg viewBox="0 0 640 300" width="100%" role="img" aria-labelledby="chart2title">
+            <title id="chart2title">Bar chart of queue composition by action: no_action 31209, review_title_meta 5400, refresh_content 3246, monitor_only 1961</title>
+            <line x1="130" y1="14" x2="130" y2="270" stroke="#C7CBD6" stroke-width="1"/>
+            <!-- bars: max 31209 -> scale to 460px width -->
+            <text x="120" y="55" text-anchor="end" font-family="Inter, sans-serif" font-size="13" fill="#565C72">no_action</text>
+            <rect x="130" y="38" width="460" height="34" fill="#8A8FA3" opacity="0.5" rx="3"/>
+            <text x="600" y="59" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="13" font-weight="600" fill="#10131F">31,209</text>
+
+            <text x="120" y="121" text-anchor="end" font-family="Inter, sans-serif" font-size="13" fill="#565C72">review_title_meta</text>
+            <rect x="130" y="104" width="79.6" height="34" fill="#1C4ED8" opacity="0.9" rx="3"/>
+            <text x="600" y="125" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="13" font-weight="600" fill="#10131F">5,400</text>
+
+            <text x="120" y="187" text-anchor="end" font-family="Inter, sans-serif" font-size="13" fill="#565C72">refresh_content</text>
+            <rect x="130" y="170" width="47.9" height="34" fill="#0F7B57" opacity="0.85" rx="3"/>
+            <text x="600" y="191" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="13" font-weight="600" fill="#10131F">3,246</text>
+
+            <text x="120" y="253" text-anchor="end" font-family="Inter, sans-serif" font-size="13" fill="#565C72">monitor_only</text>
+            <rect x="130" y="236" width="28.9" height="34" fill="#B4460F" opacity="0.85" rx="3"/>
+            <text x="600" y="257" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="13" font-weight="600" fill="#10131F">1,961</text>
+          </svg>
+          <div class="chart-caption">Queue composition by recommended action, 41,816 pages scored (March 2026 slice, ≥500 impressions).</div>
+        </div>
+
+        <h3>Archetype → action mapping</h3>
+        <div class="twrap">
+          <table>
+            <thead><tr><th>Archetype</th><th>Reason code</th><th>Action</th></tr></thead>
+            <tbody>
+              <tr><td>top_10/top_20, high decline probability, real CTR gap</td><td class="mono">ctr_below_tier_expectation</td><td>review_title_meta</td></tr>
+              <tr><td>top_10/top_20, high decline probability, no CTR gap</td><td class="mono">broad_decline_signal</td><td>refresh_content</td></tr>
+              <tr><td>any tier, already at floor position/CTR</td><td class="mono">chronically_weak_not_declining</td><td>monitor_only</td></tr>
+              <tr><td>page_1_top3, low decline probability</td><td class="mono">stable_top_performer</td><td>no_action</td></tr>
+              <tr><td>below the 500-impression volume floor</td><td class="mono">insufficient_volume</td><td>no_action</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Human review, before acting on any flagged row</h3>
+        <ul>
+          <li>Is a title/meta change already in progress for this page?</li>
+          <li>Is the low CTR intentional — a snippet written to filter low-intent clicks on purpose?</li>
+          <li>Is there a seasonal explanation for a temporary dip likely to reverse on its own?</li>
+          <li>Does this page belong to a client with very little training history? Treat with extra caution.</li>
+        </ul>
+
+        <div class="nogo">
+          <div class="nogo-title">Never automate</div>
+          <ul>
+            <li>Auto-publishing rewritten titles or metadata without human sign-off</li>
+            <li>Auto-merging or redirecting pages flagged as overlapping — a structural decision beyond this model's training</li>
+            <li>Treating a high decline probability as proof that a specific fix will work</li>
+            <li>Scoring clients or content types absent from training data without re-validating first</li>
+          </ul>
+        </div>
+
+        <h3>Monitoring &amp; retrain triggers</h3>
+        <ul>
+          <li>Re-score a fresh month's client-grouped holdout monthly; if Precision@50 drifts down toward the baseline's 0.28, retrain.</li>
+          <li>Track the monthly mean of <code>ctr_h1</code> and <code>avg_impressions_h1</code> across the scored population — a large shift means the tier-expected-CTR reference is stale.</li>
+          <li>If the overall decline rate moves sharply from ~50%, revisit the label threshold itself, not just the model.</li>
+          <li>Exclude any client with less than one full month of history from scoring until they cross that bar.</li>
+        </ul>
+      </section>
+
+      <!-- ---------- REPRODUCIBILITY ---------- -->
+      <section id="repro">
+        <div class="eyebrow">07 — Reproducibility</div>
+        <h2>Reproducibility</h2>
+        <p>Every step in this report — the data contract, the baseline, the model, the leakage audits, and the playbook — lives as an executed, committed notebook in the public repository below. Anyone can rerun this work end to end.</p>
+        <div class="twrap">
+          <table>
+            <thead><tr><th>Notebook</th><th>Covers</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">w01_research_question.ipynb</td><td>Lane choice and framing</td></tr>
+              <tr><td class="mono">w02_ml_task_framing.ipynb</td><td>Task type, target, success metric</td></tr>
+              <tr><td class="mono">w03_data_contract.ipynb</td><td>Data contract, verification queries, leakage trap</td></tr>
+              <tr><td class="mono">w04_baseline_score.ipynb</td><td>Signal checks, baseline rule, top-10 review</td></tr>
+              <tr><td class="mono">w05_model.ipynb</td><td>Model vs. baseline, split design, error analysis</td></tr>
+              <tr><td class="mono">w06_validation_audit.ipynb</td><td>Paper audit, honest-split before/after, claim rewrite</td></tr>
+              <tr><td class="mono">w07_action_playbook.ipynb</td><td>Ranked queue, playbook, exports</td></tr>
+              <tr><td class="mono">capstone.ipynb</td><td>End-to-end summary mirroring this report</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><a href="https://github.com/itsrealfarman/flyrank-ml-internship" target="_blank" rel="noopener">→ github.com/itsrealfarman/flyrank-ml-internship</a></p>
+      </section>
+
+      <!-- ---------- ACKNOWLEDGMENTS ---------- -->
+      <footer id="credit">
+        <div class="eyebrow">08 — Acknowledgments &amp; Data Credit</div>
+        <h2>Acknowledgments</h2>
+        <div class="credit-card">
+          <span class="credit-text">Built on the <strong>FlyRank ML Internship</strong> dataset — a pseudonymized, real-world search performance warehouse made available for this track.</span>
+          <a class="btn" href="https://flyrank.ai" target="_blank" rel="noopener">flyrank.ai →</a>
+        </div>
+        <div class="footer-links">
+          <a href="https://github.com/itsrealfarman/flyrank-ml-internship" target="_blank" rel="noopener">Source repository</a>
+          <a href="#abstract">Back to top ↑</a>
+        </div>
+      </footer>
+
+    </div>
+  </main>
+</div>
+
+</body>
+</html>
